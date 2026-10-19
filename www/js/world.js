@@ -1,17 +1,8 @@
-const T = CONFIG.tile, MW = 70, MH = 30;
-const map = new Uint8Array(MW * MH);
+const T = CONFIG.tile;
+let MW = 70, MH = 30, map = new Uint8Array(MW * MH), mapDef = null;
+let spawnPoints = [], pickupSpots = [];
 const solid = (tx, ty) => tx < 0 || ty < 0 || tx >= MW || ty >= MH ? true : map[ty * MW + tx] === 1;
 function rect(x, y, w, h){ for(let j=y;j<y+h;j++) for(let i=x;i<x+w;i++) if(i>=0&&j>=0&&i<MW&&j<MH) map[j*MW+i]=1; }
-function buildMap(){
-  rect(0,MH-2,MW,2);
-  rect(0,0,2,MH); rect(MW-2,0,2,MH); rect(0,0,MW,2);
-  rect(8,22,10,1); rect(26,19,12,1); rect(48,22,12,1);
-  rect(15,14,8,1); rect(40,13,8,1); rect(30,8,10,1);
-  rect(5,10,6,1); rect(58,10,7,1);
-  rect(33,24,4,4);
-  rect(22,25,2,3); rect(46,25,2,3);
-}
-buildMap();
 function hitSolid(x, y, r){
   return solid(Math.floor((x-r)/T),Math.floor((y-r)/T)) || solid(Math.floor((x+r)/T),Math.floor((y-r)/T)) ||
          solid(Math.floor((x-r)/T),Math.floor((y+r)/T)) || solid(Math.floor((x+r)/T),Math.floor((y+r)/T));
@@ -26,11 +17,6 @@ function los(x0, y0, x1, y1){
   for (let i=1;i<n;i++){ const t=i/n; if (solid(Math.floor((x0+(x1-x0)*t)/T), Math.floor((y0+(y1-y0)*t)/T))) return false; }
   return true;
 }
-const spawnPoints = [
-  {x:100,y:700},{x:1100,y:700},{x:2000,y:700},{x:1100,y:150},
-  {x:400,y:400},{x:1700,y:400},{x:600,y:700},{x:1500,y:700}
-];
-
 const fighters = [], bullets = [], grenades = [], parts = [], rings = [], pickups = [], feed = [];
 const matchState = { over: 0, winner: '' };
 let shake = 0, popupT = 0, popupText = '', clock = 0;
@@ -67,11 +53,6 @@ function addPickup(x, y, id, extra){
   if (extra) Object.assign(p, extra);
   pickups.push(p); return p;
 }
-const pickupSpots = [
-  [400, 22*32-40],[1000, 19*32-40],[1700, 22*32-40],[600, 14*32-40],[1400, 13*32-40],
-  [1100, 8*32-40],[260, 10*32-40],[2000, 10*32-40],[150, 800],[2150, 800],[900, 800],[1300, 800]
-];
-for (const s of pickupSpots) addPickup(s[0], dropToGround(s[0], s[1], 18, 12), rollItem());
 function dropWeapon(slot, x, y){
   if (y > MH*T) return;
   const gy = dropToGround(x, y, 18, 12);

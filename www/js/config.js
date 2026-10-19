@@ -4,7 +4,7 @@ const CONFIG = {
   gravity: 1400, maxFall: 800,
   runSpeed: 260, groundAccel: 2600, airAccel: 1500, jumpVel: 500,
   jet: { thrust: 2000, maxUp: 380, fuel: 100, drain: 40, regen: 35, startDelay: 0.15, infinite: true },
-  match: { bots: 5, botSkill: 0.6, killLimit: 0, playerName: 'You' },
+  match: { bots: 9, botSkill: 0.6, killLimit: 0, playerName: 'You' },
   rules: {
     respawnDelay: 3, spawnProtect: 2, selfDamage: 0.6, infiniteAmmo: false,
     dropOnDeath: true, pickupRespawn: 15, dropLife: 20,

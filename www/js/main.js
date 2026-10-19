@@ -13,6 +13,7 @@ const keys = {};
 addEventListener('keydown', e => {
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
   if (!keys[e.code]){
+    if (e.code==='Escape') doAction('menu');
     if (e.code==='KeyR') doAction('reload');
     if (e.code==='KeyQ') doAction('swap');
     if (e.code==='KeyG') doAction('nade');
@@ -25,7 +26,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => keys[e.code] = false);
 const mouse = { x: 0, y: 0, down: false, active: false };
 cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; });
-cv.addEventListener('mousedown', () => mouse.down = true);
+cv.addEventListener('mousedown', e => { if (state === 'menu') menuTap(e.clientX, e.clientY); else mouse.down = true; });
 addEventListener('mouseup', () => mouse.down = false);
 
 const stick = {
@@ -39,15 +40,16 @@ function stickVec(s){
   if (len > STICK_R){ dx = dx/len*STICK_R; dy = dy/len*STICK_R; }
   return { x: dx/STICK_R, y: dy/STICK_R };
 }
-const BTN = [ {k:'nade',l:'G'}, {k:'reload',l:'R'}, {k:'swap',l:'SW'}, {k:'pick',l:'E'} ];
-const btnFlash = [0,0,0,0];
-function btnPos(i){ return { x: innerWidth - 44, y: 112 + i*58, r: 24 }; }
+const BTN = [ {k:'nade',l:'G'}, {k:'reload',l:'R'}, {k:'swap',l:'SW'}, {k:'pick',l:'E'}, {k:'menu',l:'M'} ];
+const btnFlash = [0,0,0,0,0];
+function btnPos(i){ return i === 4 ? { x: innerWidth - 102, y: 112, r: 24 } : { x: innerWidth - 44, y: 112 + i*58, r: 24 }; }
 function hitButton(x, y){
   for (let i=0;i<BTN.length;i++){ const b = btnPos(i); if (Math.hypot(x-b.x, y-b.y) <= b.r+8) return i; }
   return -1;
 }
 function touchHandler(e){
   e.preventDefault();
+  if (state === 'menu'){ if (e.type === 'touchstart') for (const t of e.changedTouches) menuTap(t.clientX, t.clientY); return; }
   for (const t of e.changedTouches){
     if (e.type === 'touchstart'){
       const bi = hitButton(t.clientX, t.clientY);
@@ -63,7 +65,8 @@ function touchHandler(e){
 }
 ['touchstart','touchmove','touchend','touchcancel'].forEach(n => cv.addEventListener(n, touchHandler, {passive:false}));
 function doAction(k){
-  if (player.dead) return;
+  if (k === 'menu'){ state = 'menu'; return; }
+  if (!player || player.dead) return;
   if (k==='reload') player.reload();
   else if (k==='swap') player.switchTo(1 - player.cur);
   else if (k==='slot0') player.switchTo(0);
@@ -73,10 +76,16 @@ function doAction(k){
 }
 
 // ---------- fighters ----------
-const player = new Fighter({ name: CONFIG.match.playerName, col: UNIFORMS[0], human: true });
-fighters.push(player);
-for (let i=0;i<CONFIG.match.bots;i++){
-  fighters.push(new Fighter({ name: NAMES[i % NAMES.length], col: UNIFORMS[(i+1) % UNIFORMS.length], ai: true, skill: CONFIG.match.botSkill }));
+let player = null, state = 'menu';
+function startMatch(i){
+  loadMap(i);
+  fighters.length = 0; bullets.length = 0; grenades.length = 0; parts.length = 0; rings.length = 0; feed.length = 0;
+  matchState.over = 0;
+  player = new Fighter({ name: CONFIG.match.playerName, col: UNIFORMS[0], human: true });
+  fighters.push(player);
+  for (let k=0;k<CONFIG.match.bots;k++) fighters.push(new Fighter({ name: NAMES[k % NAMES.length], col: UNIFORMS[(k+1) % UNIFORMS.length], ai: true, skill: CONFIG.match.botSkill }));
+  cam.x = player.x - 200; cam.y = player.y - 200;
+  state = 'play';
 }
 const cam = { x: 0, y: 0 };
 function resetMatch(){
@@ -136,9 +145,13 @@ function drawFighter(p){
   ctx.fillStyle = w.col; ctx.fillRect(0, -3, w.len - p.recoil*3, 6);
   if (p.flash > 0){ ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(w.len+4, 0, 6, 0, 7); ctx.fill(); }
   ctx.restore();
-  // name tag + health
-  ctx.textAlign = 'center'; ctx.font = 'bold 10px sans-serif';
-  ctx.fillStyle = p.human ? '#ffeb3b' : '#ffffff'; ctx.fillText(p.name, cx, p.y-16);
+  // name tag + kills badge + health
+  ctx.font = 'bold 10px sans-serif';
+  const kt = String(p.kills), tw = ctx.measureText(p.name).width, bw = 10 + kt.length*6, W = tw + bw + 10, X = cx - W/2, Y = p.y - 30;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'; rr(X, Y, W, 14, 7);
+  ctx.fillStyle = p.col; rr(X+1, Y+1, bw, 12, 6);
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(kt, X+1+bw/2, Y+10.5);
+  ctx.textAlign = 'left'; ctx.fillStyle = p.human ? '#ffeb3b' : '#ffffff'; ctx.fillText(p.name, X+bw+5, Y+10.5);
   ctx.fillStyle = '#0008'; ctx.fillRect(p.x-2, p.y-12, p.w+4, 4);
   ctx.fillStyle = '#2ecc71'; ctx.fillRect(p.x-2, p.y-12, (p.w+4)*Math.max(0,p.hp)/100, 4);
 }
@@ -212,7 +225,7 @@ function drawHUD(){
 }
 function render(){
   ctx.setTransform(1,0,0,1,0,0);
-  const g = ctx.createLinearGradient(0,0,0,SH); g.addColorStop(0,'#6fb6e8'); g.addColorStop(1,'#d9efff');
+  const g = ctx.createLinearGradient(0,0,0,SH); g.addColorStop(0, mapDef.sky[0]); g.addColorStop(1, mapDef.sky[1]);
   ctx.fillStyle = g; ctx.fillRect(0,0,SW,SH);
   const sx = (Math.random()-0.5)*shake, sy = (Math.random()-0.5)*shake;
   ctx.setTransform(scale,0,0,scale,(-cam.x+sx)*scale,(-cam.y+sy)*scale);
@@ -220,7 +233,7 @@ function render(){
   const x0=Math.max(0,Math.floor(cam.x/T)), x1=Math.min(MW-1,Math.floor((cam.x+vw)/T));
   const y0=Math.max(0,Math.floor(cam.y/T)), y1=Math.min(MH-1,Math.floor((cam.y+vh)/T));
   for (let ty=y0; ty<=y1; ty++) for (let tx=x0; tx<=x1; tx++) if (map[ty*MW+tx]){
-    ctx.fillStyle = solid(tx,ty-1) ? '#5b4a3a' : '#4f8f3a'; ctx.fillRect(tx*T,ty*T,T,T);
+    ctx.fillStyle = solid(tx,ty-1) ? mapDef.dirt : mapDef.top; ctx.fillRect(tx*T,ty*T,T,T);
     ctx.fillStyle='#0002'; ctx.fillRect(tx*T,ty*T+T-3,T,3);
   }
   drawPickups();
@@ -250,10 +263,36 @@ function render(){
   drawHUD();
 }
 
+// ---------- map menu ----------
+function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fill(); }
+function menuRect(i){ const w = Math.min(280, innerWidth*0.42), h = 70, g = 14; return { x: innerWidth/2 - w - g/2 + (i%2)*(w+g), y: innerHeight*0.36 + Math.floor(i/2)*(h+g), w, h }; }
+function menuTap(x, y){
+  for (let i=0;i<MAPS.length;i++){ const r = menuRect(i); if (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h){ startMatch(i); return; } }
+}
+function drawMenu(){
+  const d = window.devicePixelRatio || 1;
+  ctx.setTransform(d,0,0,d,0,0);
+  const g = ctx.createLinearGradient(0,0,0,innerHeight); g.addColorStop(0,'#1d2b3a'); g.addColorStop(1,'#0e141b');
+  ctx.fillStyle = g; ctx.fillRect(0,0,innerWidth,innerHeight);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ffeb3b'; ctx.font = 'bold 34px sans-serif';
+  ctx.fillText(CONFIG.gameName, innerWidth/2, innerHeight*0.2);
+  ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif';
+  ctx.fillText('Tap a map to start  -  ' + (CONFIG.match.bots+1) + ' fighters', innerWidth/2, innerHeight*0.28);
+  MAPS.forEach((m, i) => {
+    const r = menuRect(i);
+    const gg = ctx.createLinearGradient(r.x, r.y, r.x, r.y+r.h); gg.addColorStop(0, m.sky[0]); gg.addColorStop(1, m.sky[1]);
+    ctx.fillStyle = gg; rr(r.x, r.y, r.w, r.h, 12);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(r.x, r.y, r.w, r.h, 12);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = 'bold 18px sans-serif'; ctx.fillText(m.name, r.x+14, r.y+30);
+    ctx.font = '12px sans-serif'; ctx.fillText(m.desc + '  (' + m.w + 'x' + m.h + ')', r.x+14, r.y+52);
+  });
+}
+
 // ---------- loop ----------
 let last = performance.now();
 function loop(now){
   const dt = Math.min(0.033, (now-last)/1000); last = now; clock += dt;
+  if (state === 'menu'){ drawMenu(); requestAnimationFrame(loop); return; }
   if (popupT > 0) popupT -= dt;
   if (matchState.over > 0){ matchState.over -= dt; if (matchState.over <= 0) resetMatch(); }
   for (const f of fighters) f.update(dt, cam);
