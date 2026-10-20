@@ -63,7 +63,7 @@ function drawWeaponBar(d){
   weaponBarRects().forEach((r, i) => {
     const w = WEAPONS[player.slots[i].id], on = i === player.cur;
     ctx.globalAlpha = 0.9; ctx.fillStyle = on ? '#ffeb3b' : 'rgba(0,0,0,0.55)'; rr(r.x*d, r.y*d, r.w*d, r.h*d, 8*d);
-    ctx.globalAlpha = 1; ctx.fillStyle = w.col; ctx.fillRect((r.x+10)*d, (r.y+9)*d, w.len*1.3*d, 8*d);
+    ctx.globalAlpha = 1; ctx.save(); ctx.translate((r.x+14)*d, (r.y+14)*d); ctx.scale(1.5*d, 1.5*d); drawGun(player.slots[i].id); ctx.restore();
     ctx.fillStyle = on ? '#000' : '#fff'; ctx.textAlign = 'center'; ctx.font = 'bold ' + (11*d) + 'px sans-serif';
     ctx.fillText(w.short, (r.x+r.w/2)*d, (r.y+r.h-7)*d);
     ctx.textAlign = 'right'; ctx.fillText(String(i+1), (r.x+r.w-6)*d, (r.y+13)*d);

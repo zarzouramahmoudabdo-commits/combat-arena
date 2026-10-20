@@ -130,6 +130,7 @@ class Fighter {
   }
   shoot(s, w){
     this.cool = w.rate; this.recoil = 1; this.flash = 0.05; sfxShot(w, this);
+    if (!w.exp) spawnParts(this.x+this.w/2, this.y+this.h/2-2, 1, '#d4a017', 90, 0.5, 2);
     if (!CONFIG.rules.infiniteAmmo) s.mag--;
     const cx = this.x+this.w/2, cy = this.y+this.h/2-2;
     const mx = cx + Math.cos(this.aim)*(w.len+6), my = cy + Math.sin(this.aim)*(w.len+6);

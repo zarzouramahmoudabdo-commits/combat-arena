@@ -140,8 +140,15 @@ function drawPickups(){
     else if (p.id.startsWith('nade')){ const nt = NADE[p.id.slice(5)]; fill = nt.col; border = nt.edge; label = nt.short; }
     else { fill = WEAPONS[p.id].col; border = RARITY[p.id]; label = WEAPONS[p.id].short; }
     ctx.globalAlpha = 0.25; ctx.fillStyle = border; ctx.beginPath(); ctx.arc(x+9, y+6, 14, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
-    ctx.fillStyle = fill; ctx.fillRect(x, y, p.w, p.h);
-    ctx.strokeStyle = border; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, p.w, p.h);
+    if (WEAPONS[p.id]){
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x-3, y+11, p.w+6, 3);
+      ctx.save(); ctx.translate(x + 9 - (WEAPONS[p.id].len/2 - 3)*1.2, y + 7); ctx.scale(1.2, 1.2); drawGun(p.id); ctx.restore();
+    } else if (p.id.startsWith('nade')){
+      drawNadeItem(p.id.slice(5), x+9, y+6);
+    } else {
+      ctx.fillStyle = fill; ctx.fillRect(x, y, p.w, p.h);
+      ctx.strokeStyle = border; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, p.w, p.h);
+    }
     ctx.fillStyle = '#fff'; ctx.fillText(label, x+p.w/2, y-3);
   }
   const np = player.nearPickup;
@@ -156,6 +163,7 @@ function drawFighter(p){
   if (p.protect > 0 && Math.floor(clock*12) % 2 === 0) return;
   const cx = p.x+p.w/2, f = p.facing, w = WEAPONS[p.slots[p.cur].id], L = p.look;
   const skin = SKINS[L.skin], body = p.dmgFlash > 0 ? '#ff6666' : p.col;
+  if (p.grounded){ ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(cx, p.y+p.h+1, 9, 2.5, 0, 0, 7); ctx.fill(); }
   if (p.jetting){
     ctx.fillStyle = '#ffb020'; ctx.beginPath(); ctx.moveTo(cx-f*12-4, p.y+28); ctx.lineTo(cx-f*12+4, p.y+28);
     ctx.lineTo(cx-f*12, p.y+40+Math.random()*10); ctx.fill();
@@ -181,7 +189,7 @@ function drawFighter(p){
   if (f < 0) ctx.scale(1, -1);
   ctx.rotate(-p.recoil*0.1);
   ctx.strokeStyle = skin; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(10, 0); ctx.stroke();
-  ctx.fillStyle = w.col; ctx.fillRect(4, -3, w.len - p.recoil*3, 6);
+  ctx.save(); ctx.translate(4 - p.recoil*3, 0); drawGun(p.slots[p.cur].id); ctx.restore();
   if (p.flash > 0){ ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(w.len+8, 0, 6, 0, 7); ctx.fill(); }
   ctx.restore();
   ctx.font = 'bold 10px sans-serif';

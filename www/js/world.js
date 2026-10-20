@@ -40,14 +40,15 @@ function updateParts(dt){
 }
 
 // ---------- pickups ----------
-function rollItem(){
-  let total = 0;
-  for (const k in WEAPONS) total += WEAPONS[k].weight;
-  for (const k in EXTRA_WEIGHTS) total += EXTRA_WEIGHTS[k];
+const POWER = ['sniper','hmg','rocket','glauncher','energy'];
+function rollItem(high){
+  const pool = [];
+  for (const k in WEAPONS){ if (WEAPONS[k].weight > 0 && (high ? POWER.includes(k) : !POWER.includes(k))) pool.push([k, WEAPONS[k].weight]); }
+  if (!high) for (const k in EXTRA_WEIGHTS) if (EXTRA_WEIGHTS[k] > 0) pool.push([k, EXTRA_WEIGHTS[k]]);
+  let total = 0; for (const e of pool) total += e[1];
   let r = Math.random()*total;
-  for (const k in WEAPONS){ r -= WEAPONS[k].weight; if (r < 0) return k; }
-  for (const k in EXTRA_WEIGHTS){ r -= EXTRA_WEIGHTS[k]; if (r < 0) return k; }
-  return 'nade_frag';
+  for (const e of pool){ r -= e[1]; if (r < 0) return e[0]; }
+  return pool[0][0];
 }
 function addPickup(x, y, id, extra){
   const p = { x, y, w:18, h:12, id, active:true, timer:0, temp:false, life:0, mag:null, res:null };
@@ -72,7 +73,7 @@ function updatePickups(dt){
       }
     } else if (!p.temp){
       p.timer -= dt;
-      if (p.timer <= 0){ p.id = rollItem(); p.active = true; }
+      if (p.timer <= 0){ p.id = rollItem(p.high); p.active = true; }
     }
   }
 }
