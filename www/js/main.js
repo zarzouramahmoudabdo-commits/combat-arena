@@ -138,6 +138,7 @@ function drawPickups(){
     let fill, border, label;
     if (p.id === 'ammo'){ fill = '#2d6a2d'; border = '#7CFC00'; label = 'AMMO'; }
     else if (p.id.startsWith('nade')){ const nt = NADE[p.id.slice(5)]; fill = nt.col; border = nt.edge; label = nt.short; }
+    else if (p.id.startsWith('pu_')){ const pu = PU[p.id.slice(3)]; fill = pu.col; border = pu.col; label = pu.short; }
     else { fill = WEAPONS[p.id].col; border = RARITY[p.id]; label = WEAPONS[p.id].short; }
     ctx.globalAlpha = 0.25; ctx.fillStyle = border; ctx.beginPath(); ctx.arc(x+9, y+6, 14, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
     if (WEAPONS[p.id]){
@@ -145,6 +146,8 @@ function drawPickups(){
       ctx.save(); ctx.translate(x + 9 - (WEAPONS[p.id].len/2 - 3)*1.2, y + 7); ctx.scale(1.2, 1.2); drawGun(p.id); ctx.restore();
     } else if (p.id.startsWith('nade')){
       drawNadeItem(p.id.slice(5), x+9, y+6);
+    } else if (p.id.startsWith('pu_')){
+      drawPowerItem(p.id.slice(3), x+9, y+6);
     } else {
       ctx.fillStyle = fill; ctx.fillRect(x, y, p.w, p.h);
       ctx.strokeStyle = border; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, p.w, p.h);
@@ -164,6 +167,8 @@ function drawFighter(p){
   const cx = p.x+p.w/2, f = p.facing, w = WEAPONS[p.slots[p.cur].id], L = p.look;
   const skin = SKINS[L.skin], body = p.dmgFlash > 0 ? '#ff6666' : p.col;
   if (p.grounded){ ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(cx, p.y+p.h+1, 9, 2.5, 0, 0, 7); ctx.fill(); }
+  if (p.shield > 0){ ctx.strokeStyle = 'rgba(80,170,255,' + (0.5 + (p.shieldFlash > 0 ? 0.4 : 0)) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, p.y+18, 22, 0, 7); ctx.stroke(); }
+  if (p.dmgT > 0){ ctx.fillStyle = 'rgba(255,60,60,0.14)'; ctx.beginPath(); ctx.arc(cx, p.y+18, 20, 0, 7); ctx.fill(); }
   if (p.jetting){
     ctx.fillStyle = '#ffb020'; ctx.beginPath(); ctx.moveTo(cx-f*12-4, p.y+28); ctx.lineTo(cx-f*12+4, p.y+28);
     ctx.lineTo(cx-f*12, p.y+40+Math.random()*10); ctx.fill();
@@ -262,7 +267,7 @@ function drawHUD(){
     if (btnFlash[i] > 0) btnFlash[i] -= 0.016;
   }
   ctx.globalAlpha = 1;
-  drawWeaponBar(d); drawDial(d); drawGas(d); drawModeHUD(d);
+  drawWeaponBar(d); drawDial(d); drawGas(d); drawModeHUD(d); drawFxHUD(d);
   for (const st of [stick.L, stick.R]) if (st.id !== null){
     const v = stickVec(st);
     ctx.globalAlpha=0.35; ctx.fillStyle='#fff';
@@ -287,7 +292,7 @@ function render(){
     ctx.fillStyle = NADE[gr.kind || 'frag'].col; ctx.beginPath(); ctx.arc(gr.x, gr.y, 5, 0, 7); ctx.fill();
     if (Math.floor(gr.t*6) % 2 === 0){ ctx.fillStyle = '#f33'; ctx.beginPath(); ctx.arc(gr.x, gr.y-5, 2, 0, 7); ctx.fill(); }
   }
-  drawWorldExtras();
+  drawProps(); drawWorldExtras();
   for (const f of fighters) drawFighter(f);
   for (const b of bullets){
     const w = b.w;
@@ -307,7 +312,7 @@ function render(){
     const k = r.t/0.3; ctx.strokeStyle = 'rgba(255,200,80,' + (1-k) + ')'; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(r.x, r.y, r.r*k, 0, 7); ctx.stroke();
   }
-  drawHUD();
+  drawNums(); drawHUD();
 }
 
 // ---------- map menu ----------
@@ -348,7 +353,7 @@ function loop(now){
   if (popupT > 0) popupT -= dt;
   if (matchState.over > 0){ matchState.over -= dt; if (matchState.over <= 0) resetMatch(); }
   for (const f of fighters) f.update(dt, cam);
-  updateBullets(dt); updateGrenades(dt); updateMines(dt); updateClouds(dt); modeUpdate(dt); audioUpdate(dt); updatePickups(dt); updateParts(dt); updateCamera(dt);
+  updateBullets(dt); updateGrenades(dt); updateMines(dt); updateClouds(dt); modeUpdate(dt); audioUpdate(dt); updateFx(dt); updatePickups(dt); updateParts(dt); updateCamera(dt);
   render();
   requestAnimationFrame(loop);
 }

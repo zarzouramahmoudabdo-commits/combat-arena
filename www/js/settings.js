@@ -12,6 +12,8 @@ function randomLook(){
   return { skin:r(SKINS.length), helmet:r(HELMETS.length), mask:r(MASKS.length), jet:r(JETS.length) };
 }
 function applySettings(){
+  SET.infAmmo = true;
+  SET.infJet = true;
   CONFIG.viewH = SET.zoom; CONFIG.match.bots = SET.bots; CONFIG.match.botSkill = SET.skill;
   CONFIG.rules.infiniteAmmo = SET.infAmmo; CONFIG.jet.infinite = SET.infJet; CONFIG.match.killLimit = SET.killLimit;
   CONFIG.match.playerName = PROFILE.name; CONFIG.rules.maxParticles = [120,350,600][SET.quality];
@@ -20,6 +22,8 @@ function applySettings(){
 function saveSettings(){ try { localStorage.setItem('pca_save', JSON.stringify({ set:SET, profile:PROFILE })); } catch(e){} }
 function loadSettings(){
   try { const j = JSON.parse(localStorage.getItem('pca_save') || '{}'); Object.assign(SET, j.set || {}); Object.assign(PROFILE, j.profile || {}); } catch(e){}
+  SET.infAmmo = true;
+  SET.infJet = true;
   applySettings();
 }
 loadSettings();
@@ -56,8 +60,8 @@ function tabRows(){
   return [
     optRow('Bots (next match)', SET, 'bots', [3,5,9,11], ['3','5','9','11']),
     optRow('Bot skill', SET, 'skill', [0.35,0.6,0.85], ['Easy','Normal','Hard']),
-    optRow('Infinite ammo', SET, 'infAmmo', [true,false], ['On','Off']),
-    optRow('Infinite jetpack', SET, 'infJet', [true,false], ['On','Off']),
+    { l:'Infinite ammo', v: () => 'ALWAYS ON', t: () => { SET.infAmmo = true; } },
+    { l:'Infinite jetpack', v: () => 'ALWAYS ON', t: () => { SET.infJet = true; } },
     optRow('Kill limit (next match)', SET, 'killLimit', [0,10,20,30], ['Off','10','20','30'])
   ];
 }

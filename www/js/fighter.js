@@ -8,7 +8,7 @@ class Fighter {
   }
   loadout(){
     this.slots = [ {id:'pistol', mag:WEAPONS.pistol.mag, res:WEAPONS.pistol.reserve} ];
-    this.cur = 0; this.nades = { frag: CONFIG.rules.startNades, gas: 0, mine: 0 }; this.nadeType = 'frag'; this.gas = 0;
+    this.cur = 0; this.nades = { frag: CONFIG.rules.startNades, gas: 0, mine: 0 }; this.nadeType = 'frag'; this.gas = 0; this.shield = 0; this.speedT = 0; this.dmgT = 0; this.shieldFlash = 0; this.streak = 0;
   }
   spawn(){
     let best = spawnPoints[0], bd = -1e9;
@@ -31,11 +31,12 @@ class Fighter {
     if (this.dead || this.protect > 0) return;
     if (CONFIG.rules.god && this.human) return;
     if (by && by !== this && this.team >= 0 && by.team === this.team && !CONFIG.rules.friendlyFire) return;
+    if (this.shield > 0){ const a = Math.min(this.shield, d); this.shield -= a; d -= a; this.shieldFlash = 0.2; if (d <= 0) return; }
     this.hp -= d; this.dmgFlash = 0.35; if (this.human && d > 1) sfxHurt();
     if (this.hp <= 0) this.die(by, true);
   }
   die(by, drop){
-    this.dead = true; this.respawnT = CONFIG.rules.respawnDelay; this.deaths++;
+    this.dead = true; this.respawnT = CONFIG.rules.respawnDelay; this.deaths++; this.streak = 0;
     if (drop && CONFIG.rules.dropOnDeath && this.slots[this.cur].id !== 'pistol') dropWeapon(this.slots[this.cur], this.x, this.y);
     spawnParts(this.x+this.w/2, this.y+this.h/2, 26, this.col, 300, 0.8, 4);
     spawnParts(this.x+this.w/2, this.y+this.h/2, 10, '#c0392b', 260, 0.7, 3);
@@ -43,9 +44,9 @@ class Fighter {
     if (this.human) modeHumanDied();
     if (by && by !== this){
       by.kills++; if (by.team >= 0) GAME.teamScore[by.team]++;
-      feedAdd(by.name.toUpperCase() + ' KILLED ' + this.name.toUpperCase() + ' [' + WEAPONS[by.slots[by.cur].id].short + ']');
+      feedAdd(by.name.toUpperCase() + ' KILLED ' + this.name.toUpperCase() + ' [' + WEAPONS[by.slots[by.cur].id].short + ']' + (by.lastHead ? ' HEADSHOT' : ''));
       const L = CONFIG.match.killLimit;
-      modeKill(by);
+      modeKill(by); killFx(by, this);
     } else feedAdd(this.name + ' died');
   }
   switchTo(i){
@@ -97,8 +98,21 @@ class Fighter {
     else { it.active = false; it.timer = CONFIG.rules.pickupRespawn; }
     this.nearPickup = null;
   }
+  usePowerup(it){
+    const k = it.id.slice(3);
+    if (k === 'health'){ if (this.hp >= 100) return false; this.hp = Math.min(100, this.hp + 50); }
+    else if (k === 'shield') this.shield = 50;
+    else if (k === 'speed') this.speedT = 10;
+    else this.dmgT = 10;
+    if (this.human){ popup(PU[k].name); sfxPickup(); }
+    spawnParts(it.x+9, it.y+6, 12, PU[k].col, 200, 0.5, 3);
+    if (it.temp){ const i = pickups.indexOf(it); if (i >= 0) pickups.splice(i,1); }
+    else { it.active = false; it.timer = CONFIG.rules.pickupRespawn; }
+    return true;
+  }
   collectAuto(it){
     if (it.id === 'ammo') return false;
+    if (it.id.startsWith('pu_')) return this.usePowerup(it);
     const t = it.id.slice(5);
     if (this.nades[t] >= CONFIG.rules.maxNades) return false;
     this.nades[t] = Math.min(CONFIG.rules.maxNades, this.nades[t] + 2);
@@ -205,7 +219,7 @@ class Fighter {
       let pk = null, pd = 600;
       for (const p of pickups){
         if (!p.active) continue;
-        const want = p.id!=='ammo' && !p.id.startsWith('nade') && me.slots.length < 3 && !me.slots.some(s => s.id === p.id);
+        const want = (p.id === 'pu_health' && me.hp < 60) || (WEAPONS[p.id] && me.slots.length < 3 && !me.slots.some(s => s.id === p.id));
         if (!want) continue;
         const d = Math.hypot(cx-(p.x+9), cy-(p.y+6));
         if (d < pd){ pd = d; pk = p; }
@@ -244,7 +258,7 @@ class Fighter {
     if (inp.pick) this.tryPickup();
     const ax = inp.ax, up = inp.up, fire = inp.fire;
 
-    this.gas = Math.max(0, this.gas - dt); const target = ax * C.runSpeed * (this.gas > 0 ? 0.55 : 1), acc = this.grounded ? C.groundAccel : C.airAccel;
+    this.gas = Math.max(0, this.gas - dt); this.speedT = Math.max(0, this.speedT - dt); this.dmgT = Math.max(0, this.dmgT - dt); this.shieldFlash = Math.max(0, this.shieldFlash - dt); const target = ax * C.runSpeed * (this.gas > 0 ? 0.55 : 1) * (this.speedT > 0 ? 1.4 : 1), acc = this.grounded ? C.groundAccel : C.airAccel;
     if (this.vx < target) this.vx = Math.min(target, this.vx + acc*dt);
     else if (this.vx > target) this.vx = Math.max(target, this.vx - acc*dt);
 
@@ -273,7 +287,7 @@ class Fighter {
 
     let near = null, nd = 50;
     for (const p of pickups){
-      if (!p.active || p.id==='ammo' || p.id.startsWith('nade')) continue;
+      if (!p.active || !WEAPONS[p.id]) continue;
       const d = Math.hypot(this.x+this.w/2-(p.x+9), this.y+this.h/2-(p.y+6));
       if (d < nd){ nd = d; near = p; }
     }

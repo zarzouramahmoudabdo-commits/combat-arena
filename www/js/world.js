@@ -65,7 +65,7 @@ function updatePickups(dt){
     const p = pickups[i];
     if (p.active){
       if (p.temp){ p.life -= dt; if (p.life <= 0){ pickups.splice(i,1); continue; } }
-      if (p.id==='ammo' || p.id.startsWith('nade')){
+      if (p.id==='ammo' || p.id.startsWith('nade') || p.id.startsWith('pu_')){
         for (const f of fighters){
           if (f.dead) continue;
           if (Math.hypot(f.x+f.w/2-(p.x+9), f.y+f.h/2-(p.y+6)) < 36){ if (f.collectAuto(p)) break; }
@@ -91,6 +91,8 @@ function moveBody(o, dt, rest, r){
 function explode(x, y, ex, owner){
   rings.push({ x, y, r: ex.r, t: 0 });
   sfxExplode(x, y, ex.r);
+  if (owner) owner.lastHead = false;
+  damagePropsAt(x, y, ex.r, ex.dmg, owner);
   spawnParts(x, y, 22, '#ff8c1a', 380, 0.5, 4);
   spawnParts(x, y, 10, '#444444', 160, 0.9, 5);
   shake = Math.max(shake, Math.min(14, ex.r/9));
@@ -128,12 +130,15 @@ function updateBullets(dt){
           dead = true; hitPos = { x:b.px, y:b.py };
           spawnParts(b.px, b.py, 3, '#bbbbbb', 120, 0.25, 2);
         } else {
+          if (hitProp(b, b.x, b.y)){ dead = true; hitPos = { x:b.px, y:b.py }; continue; }
           const f = hitFighter(b.x, b.y, b.owner);
           if (f){
             dead = true; hitPos = { x:b.x, y:b.y };
             if (!w.exp){
               const k = w.falloff ? 1 - 0.6*Math.min(1, b.dist/(w.speed*w.life)) : 1;
-              f.takeDamage(w.dmg*k, b.owner);
+              const head = b.y < f.y + 11, boost = (b.owner && b.owner.dmgT > 0) ? 1.5 : 1, dmg = w.dmg*k*boost*(head ? 2 : 1);
+              if (b.owner) b.owner.lastHead = head;
+              f.takeDamage(dmg, b.owner); dmgNumber(b.x, b.y, dmg, head, b.owner, f);
               spawnParts(b.x, b.y, 4, '#c0392b', 140, 0.3, 2);
             }
           }

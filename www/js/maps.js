@@ -50,4 +50,5 @@ function loadMap(i){
   }
   spawnPoints.forEach((s, k) => { if (k % 2 === 0 && pickupSpots.length < 28) pickupSpots.push(s); });
   for (const s of pickupSpots){ const hi = s.y < MH*T*0.4; addPickup(s.x, dropToGround(s.x, s.y, 18, 12), rollItem(hi), { high: hi }); }
+  spawnProps();
 }

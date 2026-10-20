@@ -24,7 +24,7 @@ const WEAPONS = {
   glauncher:{name:'Grenade L.',short:'GL', dmg:0,  rate:0.70, speed:600,  life:1.6,  spread:0.02, pellets:1, mag:4,  reserve:12,  reload:2.0, kick:60,  len:24, col:'#4b4b2a', trail:'#cccc66', weight:4,  falloff:false, shake:2, grav:900, bounce:0.45, exp:{ r:90, dmg:70, knock:500 } },
   energy:  { name:'Energy',  short:'NRG', dmg:28, rate:0.22, speed:1300, life:0.8,  spread:0.0,  pellets:1, mag:25, reserve:75,  reload:1.6, kick:5,   len:24, col:'#00c3ff', trail:'#66f0ff', weight:3,  falloff:false, shake:0 }
 };
-const EXTRA_WEIGHTS = { ammo: 0, nade_frag: 5, nade_gas: 4, nade_mine: 4 };
+const EXTRA_WEIGHTS = { ammo: 0, nade_frag: 5, nade_gas: 4, nade_mine: 4, pu_health: 6, pu_shield: 3, pu_speed: 3, pu_damage: 3 };
 
 const NAMES = ['Falcon','Viper','Ghost','Rhino','Shadow','Blaze','Hawk','Wolf','Cobra','Titan','Raven','Storm'];
 const UNIFORMS = ['#3b7a3b','#2f6fb0','#b03a2f','#c9a227','#7b3fa0','#2a9d8f','#d2691e','#555b66','#c2185b','#6d8b2f','#1e88a8','#8d6e63'];
