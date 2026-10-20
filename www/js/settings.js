@@ -2,9 +2,9 @@ const SKINS = ['#e8c39e','#c68642','#8d5524','#f1c27d','#ffdbac'];
 const HELMETS = ['Cap','Helmet','Beret','Hair'];
 const MASKS = ['None','Bandana','Goggles'];
 const JETS = ['#555555','#c0392b','#2980b9','#f1c40f','#27ae60'];
-const SET = { lefty:false, btnScale:1, btnOpacity:0.45, zoom:540, shake:true, quality:1, bots:9, skill:0.6, infAmmo:true, infJet:true, killLimit:0 };
+const SET = { lefty:false, btnScale:1, btnOpacity:0.45, zoom:540, shake:true, quality:1, bots:9, skill:0.6, infAmmo:true, infJet:true, killLimit:0, mode:'ffa', vol:{ music:0.25, weapons:0.75, explosions:0.75, move:0.5, ui:0.5, ambient:0.25 } };
 const PROFILE = { name:'You', uniform:0, skin:0, helmet:0, mask:0, jet:0 };
-const TABS = ['Character','Controls','Screen','Game'];
+const TABS = ['Character','Controls','Screen','Game','Sound'];
 let prevState = 'menu', stab = 0;
 
 function randomLook(){
@@ -15,6 +15,7 @@ function applySettings(){
   CONFIG.viewH = SET.zoom; CONFIG.match.bots = SET.bots; CONFIG.match.botSkill = SET.skill;
   CONFIG.rules.infiniteAmmo = SET.infAmmo; CONFIG.jet.infinite = SET.infJet; CONFIG.match.killLimit = SET.killLimit;
   CONFIG.match.playerName = PROFILE.name; CONFIG.rules.maxParticles = [120,350,600][SET.quality];
+  if (typeof applyVolumes === 'function') applyVolumes();
 }
 function saveSettings(){ try { localStorage.setItem('pca_save', JSON.stringify({ set:SET, profile:PROFILE })); } catch(e){} }
 function loadSettings(){
@@ -36,6 +37,12 @@ function tabRows(){
     { l:'Face', v: () => MASKS[PROFILE.mask], t: cyc('mask', MASKS.length) },
     { l:'Jetpack', v: () => '', sw: () => JETS[PROFILE.jet], t: cyc('jet', JETS.length) }
   ];
+  if (stab === 4){
+    const V = [0,0.25,0.5,0.75,1], VL = ['Off','25%','50%','75%','100%'];
+    return [ optRow('Music', SET.vol, 'music', V, VL), optRow('Weapons', SET.vol, 'weapons', V, VL),
+             optRow('Explosions', SET.vol, 'explosions', V, VL), optRow('Movement', SET.vol, 'move', V, VL),
+             optRow('Interface', SET.vol, 'ui', V, VL), optRow('Ambient', SET.vol, 'ambient', V, VL) ];
+  }
   if (stab === 1) return [
     optRow('Layout', SET, 'lefty', [false,true], ['Right-handed','Left-handed']),
     optRow('Button size', SET, 'btnScale', [0.8,1,1.2], ['Small','Medium','Large']),
@@ -99,18 +106,20 @@ function settingsTap(x, y){
   for (let i=0;i<rows.length;i++){
     const ry = L.ry + i*L.rowH;
     if (x >= L.rx && x <= L.rx+L.rw && y >= ry && y <= ry+L.rowH-5){
-      rows[i].t(); applySettings(); saveSettings(); resize();
+      rows[i].t(); applySettings(); saveSettings(); resize(); sfxClick();
       if (player){ player.col = UNIFORMS[PROFILE.uniform]; player.look = PROFILE; player.name = PROFILE.name; }
       return;
     }
   }
 }
-function settingsBtnRect(){ return { x: innerWidth/2-100, y: innerHeight*0.36 + 2*84 + 4, w: 200, h: 40 }; }
+function settingsBtnRect(){ return { x: innerWidth/2-210, y: innerHeight*0.36 + 2*84 + 4, w: 200, h: 40 }; }
+function modeBtnRect(){ return { x: innerWidth/2+10, y: innerHeight*0.36 + 2*84 + 4, w: 200, h: 40 }; }
 function drawMenuExtras(){
-  const r = settingsBtnRect();
-  ctx.fillStyle = 'rgba(255,255,255,0.15)'; rr(r.x, r.y, r.w, r.h, 10);
-  ctx.fillStyle = '#ffeb3b'; ctx.textAlign = 'center'; ctx.font = 'bold 16px sans-serif';
+  const r = settingsBtnRect(), q = modeBtnRect();
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; rr(r.x, r.y, r.w, r.h, 10); rr(q.x, q.y, q.w, q.h, 10);
+  ctx.fillStyle = '#ffeb3b'; ctx.textAlign = 'center'; ctx.font = 'bold 15px sans-serif';
   ctx.fillText('Settings / Character', r.x+r.w/2, r.y+26);
+  ctx.fillText('Mode: ' + MODES[SET.mode].name, q.x+q.w/2, q.y+26);
 }
 
 // ---------- weapon wheel (hold the gun button, drag to a weapon, release) ----------

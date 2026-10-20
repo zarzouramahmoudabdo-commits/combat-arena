@@ -95,15 +95,24 @@ let player = null, state = 'menu';
 function startMatch(i){
   loadMap(i);
   fighters.length = 0; bullets.length = 0; grenades.length = 0; mines.length = 0; clouds.length = 0; parts.length = 0; rings.length = 0; feed.length = 0;
-  matchState.over = 0;
+  matchState.over = 0; matchState.text = '';
+  setupMode();
+  const teamed = GAME.mode === 'tdm' || GAME.mode === 'survival';
   player = new Fighter({ name: PROFILE.name, col: UNIFORMS[PROFILE.uniform], look: PROFILE, human: true });
+  if (teamed){ player.team = 0; player.col = TEAM_COL[0]; }
   fighters.push(player);
-  for (let k=0;k<CONFIG.match.bots;k++) fighters.push(new Fighter({ name: NAMES[k % NAMES.length], col: UNIFORMS[(PROFILE.uniform+1+k) % UNIFORMS.length], ai: true, skill: CONFIG.match.botSkill }));
+  const nb = GAME.mode === 'survival' ? 0 : (GAME.mode === 'sandbox' ? 3 : CONFIG.match.bots);
+  for (let k=0;k<nb;k++){
+    const b = new Fighter({ name: NAMES[k % NAMES.length], col: UNIFORMS[(PROFILE.uniform+1+k) % UNIFORMS.length], ai: true, skill: CONFIG.match.botSkill });
+    if (GAME.mode === 'tdm'){ b.team = (k+1) % 2; b.col = TEAM_COL[b.team]; }
+    fighters.push(b);
+  }
   cam.x = player.x - 200; cam.y = player.y - 200;
   state = 'play';
 }
 const cam = { x: 0, y: 0 };
 function resetMatch(){
+  modeReset();
   for (const f of fighters){ f.kills = 0; f.deaths = 0; f.spawn(); }
   matchState.over = 0; matchState.winner = '';
 }
@@ -234,7 +243,7 @@ function drawHUD(){
   if (matchState.over){
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0,0,SW,SH);
     ctx.fillStyle = '#ffeb3b'; ctx.textAlign='center'; ctx.font = 'bold ' + (36*u) + 'px sans-serif';
-    ctx.fillText(matchState.winner + ' wins!', SW/2, SH/2);
+    ctx.fillText(matchState.text || (matchState.winner + ' wins!'), SW/2, SH/2);
   }
   for (let i=0;i<BTN.length;i++){
     const bp = btnPos(i), k = BTN[i].k, X = bp.x*d, Y = bp.y*d, R = bp.r*d;
@@ -245,7 +254,7 @@ function drawHUD(){
     if (btnFlash[i] > 0) btnFlash[i] -= 0.016;
   }
   ctx.globalAlpha = 1;
-  drawWeaponBar(d); drawDial(d); drawGas(d);
+  drawWeaponBar(d); drawDial(d); drawGas(d); drawModeHUD(d);
   for (const st of [stick.L, stick.R]) if (st.id !== null){
     const v = stickVec(st);
     ctx.globalAlpha=0.35; ctx.fillStyle='#fff';
@@ -297,6 +306,8 @@ function render(){
 function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fill(); }
 function menuRect(i){ const w = Math.min(280, innerWidth*0.42), h = 70, g = 14; return { x: innerWidth/2 - w - g/2 + (i%2)*(w+g), y: innerHeight*0.36 + Math.floor(i/2)*(h+g), w, h }; }
 function menuTap(x, y){
+  const mb = modeBtnRect();
+  if (x >= mb.x && x <= mb.x+mb.w && y >= mb.y && y <= mb.y+mb.h){ SET.mode = MODE_KEYS[(MODE_KEYS.indexOf(SET.mode)+1) % MODE_KEYS.length]; saveSettings(); sfxClick(); return; }
   const sb = settingsBtnRect();
   if (x >= sb.x && x <= sb.x+sb.w && y >= sb.y && y <= sb.y+sb.h){ prevState = 'menu'; state = 'settings'; return; }
   for (let i=0;i<MAPS.length;i++){ const r = menuRect(i); if (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h){ startMatch(i); return; } }
@@ -329,7 +340,7 @@ function loop(now){
   if (popupT > 0) popupT -= dt;
   if (matchState.over > 0){ matchState.over -= dt; if (matchState.over <= 0) resetMatch(); }
   for (const f of fighters) f.update(dt, cam);
-  updateBullets(dt); updateGrenades(dt); updateMines(dt); updateClouds(dt); updatePickups(dt); updateParts(dt); updateCamera(dt);
+  updateBullets(dt); updateGrenades(dt); updateMines(dt); updateClouds(dt); modeUpdate(dt); audioUpdate(dt); updatePickups(dt); updateParts(dt); updateCamera(dt);
   render();
   requestAnimationFrame(loop);
 }

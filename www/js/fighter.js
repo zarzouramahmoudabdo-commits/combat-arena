@@ -2,7 +2,7 @@ class Fighter {
   constructor(o){
     this.w = 20; this.h = 36;
     this.name = o.name; this.col = o.col; this.look = o.look || randomLook(); this.human = !!o.human; this.ai = !!o.ai; this.skill = o.skill || 0.6;
-    this.kills = 0; this.deaths = 0; this.dead = false; this.respawnT = 0; this.nearPickup = null;
+    this.team = -1; this.kills = 0; this.deaths = 0; this.dead = false; this.respawnT = 0; this.nearPickup = null;
     this.target = null; this.aiT = 0; this.reactT = 0; this.aimErr = 0; this.strafe = 1;
     this.spawn();
   }
@@ -29,7 +29,9 @@ class Fighter {
   }
   takeDamage(d, by){
     if (this.dead || this.protect > 0) return;
-    this.hp -= d; this.dmgFlash = 0.35;
+    if (CONFIG.rules.god && this.human) return;
+    if (by && by !== this && this.team >= 0 && by.team === this.team && !CONFIG.rules.friendlyFire) return;
+    this.hp -= d; this.dmgFlash = 0.35; if (this.human && d > 1) sfxHurt();
     if (this.hp <= 0) this.die(by, true);
   }
   die(by, drop){
@@ -38,11 +40,12 @@ class Fighter {
     spawnParts(this.x+this.w/2, this.y+this.h/2, 26, this.col, 300, 0.8, 4);
     spawnParts(this.x+this.w/2, this.y+this.h/2, 10, '#c0392b', 260, 0.7, 3);
     if (this.human) shake = Math.max(shake, 6);
+    if (this.human) modeHumanDied();
     if (by && by !== this){
-      by.kills++;
+      by.kills++; if (by.team >= 0) GAME.teamScore[by.team]++;
       feedAdd(by.name.toUpperCase() + ' KILLED ' + this.name.toUpperCase() + ' [' + WEAPONS[by.slots[by.cur].id].short + ']');
       const L = CONFIG.match.killLimit;
-      if (L > 0 && by.kills >= L && !matchState.over){ matchState.over = 5; matchState.winner = by.name; }
+      modeKill(by);
     } else feedAdd(this.name + ' died');
   }
   switchTo(i){
@@ -64,7 +67,7 @@ class Fighter {
     const k = this.nadeType;
     if (this.nades[k] <= 0 || this.throwCool > 0) return;
     if (k === 'mine' && !this.grounded){ if (this.human) popup('Plant mines on the ground'); return; }
-    this.nades[k]--; this.throwCool = 0.4;
+    this.nades[k]--; this.throwCool = 0.4; sfxThrow(k);
     if (k === 'mine'){
       const cx = this.x + this.w/2, gy = dropToGround(cx-5, this.y, 10, 6) + 6;
       mines.push({ x: cx, y: gy, arm: 1.2, life: 90, owner: this });
@@ -88,7 +91,7 @@ class Fighter {
     if (this.slots.length < CONFIG.rules.maxWeapons){ this.slots.push(slot); this.cur = this.slots.length - 1; }
     else { dropWeapon(this.slots[this.cur], this.x, this.y); this.slots[this.cur] = slot; }
     this.reloadT = 0; this.cool = 0.2;
-    if (this.human) popup('Picked up ' + def.name);
+    if (this.human){ popup('Picked up ' + def.name); sfxPickup(); }
     spawnParts(it.x+9, it.y+6, 10, '#ffffff', 160, 0.4, 2);
     if (it.temp){ const i = pickups.indexOf(it); if (i >= 0) pickups.splice(i,1); }
     else { it.active = false; it.timer = CONFIG.rules.pickupRespawn; }
@@ -99,7 +102,7 @@ class Fighter {
     const t = it.id.slice(5);
     if (this.nades[t] >= CONFIG.rules.maxNades) return false;
     this.nades[t] = Math.min(CONFIG.rules.maxNades, this.nades[t] + 2);
-    if (this.human) popup('+ ' + NADE[t].name);
+    if (this.human){ popup('+ ' + NADE[t].name); sfxPickup(); }
     if (this.nades[this.nadeType] <= 0) this.nadeType = t;
     spawnParts(it.x+9, it.y+6, 8, '#ffffff', 160, 0.4, 2);
     if (it.temp){ const i = pickups.indexOf(it); if (i >= 0) pickups.splice(i,1); }
@@ -126,7 +129,7 @@ class Fighter {
     }
   }
   shoot(s, w){
-    this.cool = w.rate; this.recoil = 1; this.flash = 0.05;
+    this.cool = w.rate; this.recoil = 1; this.flash = 0.05; sfxShot(w, this);
     if (!CONFIG.rules.infiniteAmmo) s.mag--;
     const cx = this.x+this.w/2, cy = this.y+this.h/2-2;
     const mx = cx + Math.cos(this.aim)*(w.len+6), my = cy + Math.sin(this.aim)*(w.len+6);
@@ -172,7 +175,7 @@ class Fighter {
       me.strafe = Math.random() < 0.5 ? -1 : 1;
       let best = null, bd = 1e9;
       for (const f of fighters){
-        if (f === me || f.dead) continue;
+        if (f === me || f.dead || (me.team >= 0 && f.team === me.team)) continue;
         const d = Math.hypot(f.x-me.x, f.y-me.y) + (los(cx,cy,f.x+f.w/2,f.y+f.h/2) ? 0 : 600);
         if (d < bd){ bd = d; best = f; }
       }
@@ -226,7 +229,7 @@ class Fighter {
   update(dt, cam){
     if (this.dead){
       this.respawnT -= dt;
-      if (this.respawnT <= 0 && !matchState.over) this.spawn();
+      if (this.respawnT <= 0 && !matchState.over && !(this.ai && GAME.mode === 'survival')) this.spawn();
       return;
     }
     const C = CONFIG, J = C.jet;

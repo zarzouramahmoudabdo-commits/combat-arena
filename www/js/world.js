@@ -89,6 +89,7 @@ function moveBody(o, dt, rest, r){
 }
 function explode(x, y, ex, owner){
   rings.push({ x, y, r: ex.r, t: 0 });
+  sfxExplode(x, y, ex.r);
   spawnParts(x, y, 22, '#ff8c1a', 380, 0.5, 4);
   spawnParts(x, y, 10, '#444444', 160, 0.9, 5);
   shake = Math.max(shake, Math.min(14, ex.r/9));
