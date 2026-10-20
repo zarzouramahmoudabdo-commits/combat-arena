@@ -17,16 +17,19 @@ addEventListener('keydown', e => {
     if (e.code==='KeyR') doAction('reload');
     if (e.code==='KeyQ') doAction('swap');
     if (e.code==='KeyG') doAction('nade');
+    if (e.code==='KeyZ') cycleNade();
     if (e.code==='KeyE') doAction('pick');
     if (e.code==='Digit1') doAction('slot0');
     if (e.code==='Digit2') doAction('slot1');
+    if (e.code==='Digit3') doAction('slot2');
+    if (e.code==='Digit4') doAction('slot3');
   }
   keys[e.code] = true;
 });
 addEventListener('keyup', e => keys[e.code] = false);
 const mouse = { x: 0, y: 0, down: false, active: false };
 cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; });
-cv.addEventListener('mousedown', e => { if (state === 'menu') menuTap(e.clientX, e.clientY); else mouse.down = true; });
+cv.addEventListener('mousedown', e => { if (state === 'menu') menuTap(e.clientX, e.clientY); else if (state === 'settings') settingsTap(e.clientX, e.clientY); else if (!weaponBarTap(e.clientX, e.clientY)) mouse.down = true; });
 addEventListener('mouseup', () => mouse.down = false);
 
 const stick = {
@@ -40,9 +43,12 @@ function stickVec(s){
   if (len > STICK_R){ dx = dx/len*STICK_R; dy = dy/len*STICK_R; }
   return { x: dx/STICK_R, y: dy/STICK_R };
 }
-const BTN = [ {k:'nade',l:'G'}, {k:'reload',l:'R'}, {k:'swap',l:'SW'}, {k:'pick',l:'E'}, {k:'menu',l:'M'} ];
+const BTN = [ {k:'nade'}, {k:'pick'}, {k:'gear'}, {k:'menu'} ];
 const btnFlash = [0,0,0,0,0];
-function btnPos(i){ return i === 4 ? { x: innerWidth - 102, y: 112, r: 24 } : { x: innerWidth - 44, y: 112 + i*58, r: 24 }; }
+function btnPos(i){
+  const s = SET.btnScale, r = 24*s, col = i >= 2 ? 1 : 0, row = i >= 2 ? i - 2 : i;
+  return { x: SET.lefty ? 44 + col*(r*2+10) : innerWidth - 44 - col*(r*2+10), y: 112 + row*(r*2+10), r };
+}
 function hitButton(x, y){
   for (let i=0;i<BTN.length;i++){ const b = btnPos(i); if (Math.hypot(x-b.x, y-b.y) <= b.r+8) return i; }
   return -1;
@@ -50,15 +56,21 @@ function hitButton(x, y){
 function touchHandler(e){
   e.preventDefault();
   if (state === 'menu'){ if (e.type === 'touchstart') for (const t of e.changedTouches) menuTap(t.clientX, t.clientY); return; }
+  if (state === 'settings'){ if (e.type === 'touchstart') for (const t of e.changedTouches) settingsTap(t.clientX, t.clientY); return; }
   for (const t of e.changedTouches){
     if (e.type === 'touchstart'){
+      if (dialStart(t) || weaponBarTap(t.clientX, t.clientY)) continue;
       const bi = hitButton(t.clientX, t.clientY);
-      if (bi >= 0){ btnFlash[bi] = 0.15; doAction(BTN[bi].k); continue; }
-      const s = t.clientX < innerWidth/2 ? stick.L : stick.R;
+      if (bi >= 0){ btnFlash[bi] = 0.15; if (BTN[bi].k === 'wheel'){ if (player && !player.dead){ wheel.open = true; wheel.id = t.identifier; wheel.sel = null; } } else doAction(BTN[bi].k); continue; }
+      const s = ((t.clientX < innerWidth/2) !== SET.lefty) ? stick.L : stick.R;
       if (s.id === null){ s.id = t.identifier; s.ox = s.x = t.clientX; s.oy = s.y = t.clientY; }
     } else if (e.type === 'touchmove'){
       for (const k of [stick.L, stick.R]) if (k.id === t.identifier){ k.x = t.clientX; k.y = t.clientY; }
+      if (wheel.open && wheel.id === t.identifier) wheelMove(t.clientX, t.clientY);
+      dialMove(t);
     } else {
+      if (wheel.open && wheel.id === t.identifier) wheelEnd();
+      dialEnd(t);
       for (const k of [stick.L, stick.R]) if (k.id === t.identifier) k.id = null;
     }
   }
@@ -66,11 +78,14 @@ function touchHandler(e){
 ['touchstart','touchmove','touchend','touchcancel'].forEach(n => cv.addEventListener(n, touchHandler, {passive:false}));
 function doAction(k){
   if (k === 'menu'){ state = 'menu'; return; }
+  if (k === 'gear'){ prevState = 'play'; state = 'settings'; return; }
   if (!player || player.dead) return;
   if (k==='reload') player.reload();
-  else if (k==='swap') player.switchTo(1 - player.cur);
+  else if (k==='swap') player.switchTo((player.cur + 1) % player.slots.length);
   else if (k==='slot0') player.switchTo(0);
   else if (k==='slot1') player.switchTo(1);
+  else if (k==='slot2') player.switchTo(2);
+  else if (k==='slot3') player.switchTo(3);
   else if (k==='nade') player.throwNade();
   else if (k==='pick') player.tryPickup();
 }
@@ -79,11 +94,11 @@ function doAction(k){
 let player = null, state = 'menu';
 function startMatch(i){
   loadMap(i);
-  fighters.length = 0; bullets.length = 0; grenades.length = 0; parts.length = 0; rings.length = 0; feed.length = 0;
+  fighters.length = 0; bullets.length = 0; grenades.length = 0; mines.length = 0; clouds.length = 0; parts.length = 0; rings.length = 0; feed.length = 0;
   matchState.over = 0;
-  player = new Fighter({ name: CONFIG.match.playerName, col: UNIFORMS[0], human: true });
+  player = new Fighter({ name: PROFILE.name, col: UNIFORMS[PROFILE.uniform], look: PROFILE, human: true });
   fighters.push(player);
-  for (let k=0;k<CONFIG.match.bots;k++) fighters.push(new Fighter({ name: NAMES[k % NAMES.length], col: UNIFORMS[(k+1) % UNIFORMS.length], ai: true, skill: CONFIG.match.botSkill }));
+  for (let k=0;k<CONFIG.match.bots;k++) fighters.push(new Fighter({ name: NAMES[k % NAMES.length], col: UNIFORMS[(PROFILE.uniform+1+k) % UNIFORMS.length], ai: true, skill: CONFIG.match.botSkill }));
   cam.x = player.x - 200; cam.y = player.y - 200;
   state = 'play';
 }
@@ -113,8 +128,9 @@ function drawPickups(){
     const bob = Math.sin(clock*3 + p.x)*2, x = p.x, y = p.y + bob;
     let fill, border, label;
     if (p.id === 'ammo'){ fill = '#2d6a2d'; border = '#7CFC00'; label = 'AMMO'; }
-    else if (p.id === 'nade'){ fill = '#333'; border = '#ff6633'; label = 'GRN'; }
+    else if (p.id.startsWith('nade')){ const nt = NADE[p.id.slice(5)]; fill = nt.col; border = nt.edge; label = nt.short; }
     else { fill = WEAPONS[p.id].col; border = RARITY[p.id]; label = WEAPONS[p.id].short; }
+    ctx.globalAlpha = 0.25; ctx.fillStyle = border; ctx.beginPath(); ctx.arc(x+9, y+6, 14, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
     ctx.fillStyle = fill; ctx.fillRect(x, y, p.w, p.h);
     ctx.strokeStyle = border; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, p.w, p.h);
     ctx.fillStyle = '#fff'; ctx.fillText(label, x+p.w/2, y-3);
@@ -129,31 +145,46 @@ function drawPickups(){
 function drawFighter(p){
   if (p.dead) return;
   if (p.protect > 0 && Math.floor(clock*12) % 2 === 0) return;
-  const cx = p.x+p.w/2, cy = p.y+p.h/2, w = WEAPONS[p.slots[p.cur].id];
+  const cx = p.x+p.w/2, f = p.facing, w = WEAPONS[p.slots[p.cur].id], L = p.look;
+  const skin = SKINS[L.skin], body = p.dmgFlash > 0 ? '#ff6666' : p.col;
   if (p.jetting){
-    ctx.fillStyle = '#ffb020';
-    ctx.beginPath(); ctx.moveTo(cx-p.facing*10-4,cy+8); ctx.lineTo(cx-p.facing*10+4,cy+8);
-    ctx.lineTo(cx-p.facing*10,cy+22+Math.random()*10); ctx.fill();
+    ctx.fillStyle = '#ffb020'; ctx.beginPath(); ctx.moveTo(cx-f*12-4, p.y+28); ctx.lineTo(cx-f*12+4, p.y+28);
+    ctx.lineTo(cx-f*12, p.y+40+Math.random()*10); ctx.fill();
   }
-  ctx.fillStyle = '#555'; ctx.fillRect(cx-p.facing*14-4, cy-8, 8, 18);
-  ctx.fillStyle = p.dmgFlash > 0 ? '#ff6666' : p.col; ctx.fillRect(p.x, p.y+8, p.w, p.h-8);
-  ctx.fillStyle = '#e8c39e'; ctx.fillRect(p.x+3, p.y, p.w-6, 10);
-  ctx.fillStyle = '#222'; ctx.fillRect(p.x+2, p.y-2, p.w-4, 5);
-  ctx.save(); ctx.translate(cx, cy-2); ctx.rotate(p.aim);
-  if (p.facing < 0) ctx.scale(1, -1);
+  ctx.fillStyle = JETS[L.jet]; ctx.fillRect(cx-f*12-5, p.y+11, 10, 17);
+  ctx.fillStyle = '#222'; ctx.fillRect(cx-f*12-3, p.y+28, 6, 3);
+  const sw = p.grounded ? Math.sin(p.x*0.18)*Math.min(1, Math.abs(p.vx)/150)*6 : 3;
+  ctx.strokeStyle = '#2f343b'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx-3, p.y+25); ctx.lineTo(cx-3+sw, p.y+35); ctx.moveTo(cx+3, p.y+25); ctx.lineTo(cx+3-sw, p.y+35); ctx.stroke();
+  ctx.lineCap = 'butt';
+  ctx.fillStyle = '#111'; ctx.fillRect(cx-6+sw, p.y+34, 6, 2); ctx.fillRect(cx+sw*-1, p.y+34, 6, 2);
+  ctx.fillStyle = body; ctx.fillRect(p.x+3, p.y+10, 14, 16);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p.x+3, p.y+10, 14, 4); ctx.fillRect(p.x+3, p.y+23, 14, 3);
+  ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(cx, p.y+6, 6, 0, 7); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.fillRect(cx+f*3-1, p.y+5, 2, 2);
+  if (L.mask === 1){ ctx.fillStyle = '#b03a2f'; ctx.fillRect(cx-6, p.y+7, 12, 4); }
+  if (L.mask === 2){ ctx.fillStyle = '#f1c40f'; ctx.fillRect(cx-6, p.y+3, 12, 4); ctx.fillStyle = '#111'; ctx.fillRect(cx+f*3-1, p.y+4, 2, 2); }
+  if (L.helmet === 0){ ctx.fillStyle = '#3d5a2a'; ctx.beginPath(); ctx.arc(cx, p.y+5, 6.5, Math.PI, 0); ctx.fill(); ctx.fillRect(f > 0 ? cx : cx-8, p.y+4, 8, 2); }
+  else if (L.helmet === 1){ ctx.fillStyle = '#4b5320'; ctx.beginPath(); ctx.arc(cx, p.y+5, 7.5, Math.PI, 0); ctx.lineTo(cx+7.5, p.y+8); ctx.lineTo(cx-7.5, p.y+8); ctx.fill(); }
+  else if (L.helmet === 2){ ctx.fillStyle = '#8e1b1b'; ctx.beginPath(); ctx.ellipse(cx-f*2, p.y, 8, 3.5, -f*0.2, 0, 7); ctx.fill(); }
+  else { ctx.fillStyle = '#2b1d0e'; ctx.beginPath(); ctx.arc(cx, p.y+4, 6, Math.PI, 0); ctx.fill(); }
+  ctx.save(); ctx.translate(cx, p.y+16); ctx.rotate(p.aim);
+  if (f < 0) ctx.scale(1, -1);
   ctx.rotate(-p.recoil*0.1);
-  ctx.fillStyle = w.col; ctx.fillRect(0, -3, w.len - p.recoil*3, 6);
-  if (p.flash > 0){ ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(w.len+4, 0, 6, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = skin; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(10, 0); ctx.stroke();
+  ctx.fillStyle = w.col; ctx.fillRect(4, -3, w.len - p.recoil*3, 6);
+  if (p.flash > 0){ ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(w.len+8, 0, 6, 0, 7); ctx.fill(); }
   ctx.restore();
-  // name tag + kills badge + health
   ctx.font = 'bold 10px sans-serif';
   const kt = String(p.kills), tw = ctx.measureText(p.name).width, bw = 10 + kt.length*6, W = tw + bw + 10, X = cx - W/2, Y = p.y - 30;
   ctx.fillStyle = 'rgba(0,0,0,0.55)'; rr(X, Y, W, 14, 7);
   ctx.fillStyle = p.col; rr(X+1, Y+1, bw, 12, 6);
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(kt, X+1+bw/2, Y+10.5);
   ctx.textAlign = 'left'; ctx.fillStyle = p.human ? '#ffeb3b' : '#ffffff'; ctx.fillText(p.name, X+bw+5, Y+10.5);
-  ctx.fillStyle = '#0008'; ctx.fillRect(p.x-2, p.y-12, p.w+4, 4);
-  ctx.fillStyle = '#2ecc71'; ctx.fillRect(p.x-2, p.y-12, (p.w+4)*Math.max(0,p.hp)/100, 4);
+  if (p.hp !== undefined){
+    ctx.fillStyle = '#0008'; ctx.fillRect(p.x-2, p.y-12, p.w+4, 4);
+    ctx.fillStyle = '#2ecc71'; ctx.fillRect(p.x-2, p.y-12, (p.w+4)*Math.max(0,p.hp)/100, 4);
+  }
 }
 function drawHUD(){
   ctx.setTransform(1,0,0,1,0,0);
@@ -166,6 +197,7 @@ function drawHUD(){
   ctx.fillStyle='#fff'; ctx.font = 'bold ' + (16*u) + 'px sans-serif'; ctx.textAlign='left';
   ctx.fillText('K ' + p.kills + '   D ' + p.deaths, pad, pad+54*u);
   // kill feed
+  ctx.fillStyle = '#ff5050';
   ctx.font = 'bold ' + (13*u) + 'px sans-serif';
   for (let i=0;i<feed.length;i++){
     ctx.globalAlpha = Math.min(1, feed[i].t); ctx.fillText(feed[i].text, pad, pad+76*u + i*16*u);
@@ -183,16 +215,14 @@ function drawHUD(){
   ctx.textAlign='right'; ctx.font = 'bold ' + (22*u) + 'px sans-serif'; ctx.fillStyle='#fff';
   ctx.fillText(p.reloadT>0 ? 'RELOADING...' : (w.name + '  ' + (inf?'INF':s.mag) + ' / ' + (inf?'INF':s.res)), SW-pad, pad+22*u);
   ctx.font = 'bold ' + (14*u) + 'px sans-serif';
-  ctx.fillStyle = p.cur===0 ? '#ffeb3b' : '#bbb'; ctx.fillText('[1] ' + WEAPONS[p.slots[0].id].short, SW-pad-120*u, pad+44*u);
-  ctx.fillStyle = p.cur===1 ? '#ffeb3b' : '#bbb'; ctx.fillText('[2] ' + WEAPONS[p.slots[1].id].short, SW-pad, pad+44*u);
-  ctx.fillStyle = '#fff'; ctx.fillText('Grenades: ' + p.nades, SW-pad, pad+62*u);
+  ctx.fillStyle = '#fff'; ctx.fillText(NADE[p.nadeType].name + ': ' + p.nades[p.nadeType], SW-pad, pad+62*u);
   if (p.reloadT > 0){
     ctx.fillStyle='#0008'; ctx.fillRect(SW-pad-160*u, pad+68*u, 160*u, 6*u);
     ctx.fillStyle='#fff'; ctx.fillRect(SW-pad-160*u, pad+68*u, 160*u*(1 - p.reloadT/w.reload), 6*u);
   }
   if (popupT > 0){
     ctx.globalAlpha = Math.min(1, popupT); ctx.textAlign='center'; ctx.fillStyle='#fff';
-    ctx.font = 'bold ' + (20*u) + 'px sans-serif'; ctx.fillText(popupText, SW/2, SH-40*u); ctx.globalAlpha = 1;
+    ctx.font = 'bold ' + (20*u) + 'px sans-serif'; ctx.fillText(popupText, SW/2, SH-84*u); ctx.globalAlpha = 1;
   }
   if (p.dead && !matchState.over){
     ctx.fillStyle = 'rgba(120,0,0,0.35)'; ctx.fillRect(0,0,SW,SH);
@@ -207,13 +237,15 @@ function drawHUD(){
     ctx.fillText(matchState.winner + ' wins!', SW/2, SH/2);
   }
   for (let i=0;i<BTN.length;i++){
-    const bp = btnPos(i);
-    ctx.globalAlpha = btnFlash[i] > 0 ? 0.85 : 0.4;
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bp.x*d, bp.y*d, bp.r*d, 0, 7); ctx.fill();
-    ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.textAlign='center'; ctx.font = 'bold ' + (16*d) + 'px sans-serif';
-    ctx.fillText(BTN[i].l, bp.x*d, bp.y*d + 6*d);
+    const bp = btnPos(i), k = BTN[i].k, X = bp.x*d, Y = bp.y*d, R = bp.r*d;
+    ctx.globalAlpha = btnFlash[i] > 0 ? Math.min(1, SET.btnOpacity+0.4) : SET.btnOpacity;
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.fill();
+    ctx.globalAlpha = Math.min(1, SET.btnOpacity+0.4);
+    drawBtnIcon(k, X, Y, R, p);
     if (btnFlash[i] > 0) btnFlash[i] -= 0.016;
   }
+  ctx.globalAlpha = 1;
+  drawWeaponBar(d); drawDial(d); drawGas(d);
   for (const st of [stick.L, stick.R]) if (st.id !== null){
     const v = stickVec(st);
     ctx.globalAlpha=0.35; ctx.fillStyle='#fff';
@@ -227,20 +259,18 @@ function render(){
   ctx.setTransform(1,0,0,1,0,0);
   const g = ctx.createLinearGradient(0,0,0,SH); g.addColorStop(0, mapDef.sky[0]); g.addColorStop(1, mapDef.sky[1]);
   ctx.fillStyle = g; ctx.fillRect(0,0,SW,SH);
-  const sx = (Math.random()-0.5)*shake, sy = (Math.random()-0.5)*shake;
+  const sh = SET.shake ? shake : 0, sx = (Math.random()-0.5)*sh, sy = (Math.random()-0.5)*sh;
   ctx.setTransform(scale,0,0,scale,(-cam.x+sx)*scale,(-cam.y+sy)*scale);
   const vw = SW/scale, vh = CONFIG.viewH;
   const x0=Math.max(0,Math.floor(cam.x/T)), x1=Math.min(MW-1,Math.floor((cam.x+vw)/T));
   const y0=Math.max(0,Math.floor(cam.y/T)), y1=Math.min(MH-1,Math.floor((cam.y+vh)/T));
-  for (let ty=y0; ty<=y1; ty++) for (let tx=x0; tx<=x1; tx++) if (map[ty*MW+tx]){
-    ctx.fillStyle = solid(tx,ty-1) ? mapDef.dirt : mapDef.top; ctx.fillRect(tx*T,ty*T,T,T);
-    ctx.fillStyle='#0002'; ctx.fillRect(tx*T,ty*T+T-3,T,3);
-  }
+  drawTerrain(x0, x1, y0, y1);
   drawPickups();
   for (const gr of grenades){
-    ctx.fillStyle = '#2f4f2f'; ctx.beginPath(); ctx.arc(gr.x, gr.y, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = NADE[gr.kind || 'frag'].col; ctx.beginPath(); ctx.arc(gr.x, gr.y, 5, 0, 7); ctx.fill();
     if (Math.floor(gr.t*6) % 2 === 0){ ctx.fillStyle = '#f33'; ctx.beginPath(); ctx.arc(gr.x, gr.y-5, 2, 0, 7); ctx.fill(); }
   }
+  drawWorldExtras();
   for (const f of fighters) drawFighter(f);
   for (const b of bullets){
     const w = b.w;
@@ -267,6 +297,8 @@ function render(){
 function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fill(); }
 function menuRect(i){ const w = Math.min(280, innerWidth*0.42), h = 70, g = 14; return { x: innerWidth/2 - w - g/2 + (i%2)*(w+g), y: innerHeight*0.36 + Math.floor(i/2)*(h+g), w, h }; }
 function menuTap(x, y){
+  const sb = settingsBtnRect();
+  if (x >= sb.x && x <= sb.x+sb.w && y >= sb.y && y <= sb.y+sb.h){ prevState = 'menu'; state = 'settings'; return; }
   for (let i=0;i<MAPS.length;i++){ const r = menuRect(i); if (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h){ startMatch(i); return; } }
 }
 function drawMenu(){
@@ -292,11 +324,12 @@ function drawMenu(){
 let last = performance.now();
 function loop(now){
   const dt = Math.min(0.033, (now-last)/1000); last = now; clock += dt;
-  if (state === 'menu'){ drawMenu(); requestAnimationFrame(loop); return; }
+  if (state === 'menu'){ drawMenu(); drawMenuExtras(); requestAnimationFrame(loop); return; }
+  if (state === 'settings'){ drawSettings(); requestAnimationFrame(loop); return; }
   if (popupT > 0) popupT -= dt;
   if (matchState.over > 0){ matchState.over -= dt; if (matchState.over <= 0) resetMatch(); }
   for (const f of fighters) f.update(dt, cam);
-  updateBullets(dt); updateGrenades(dt); updatePickups(dt); updateParts(dt); updateCamera(dt);
+  updateBullets(dt); updateGrenades(dt); updateMines(dt); updateClouds(dt); updatePickups(dt); updateParts(dt); updateCamera(dt);
   render();
   requestAnimationFrame(loop);
 }

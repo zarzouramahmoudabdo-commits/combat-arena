@@ -1,15 +1,14 @@
 class Fighter {
   constructor(o){
     this.w = 20; this.h = 36;
-    this.name = o.name; this.col = o.col; this.human = !!o.human; this.ai = !!o.ai; this.skill = o.skill || 0.6;
+    this.name = o.name; this.col = o.col; this.look = o.look || randomLook(); this.human = !!o.human; this.ai = !!o.ai; this.skill = o.skill || 0.6;
     this.kills = 0; this.deaths = 0; this.dead = false; this.respawnT = 0; this.nearPickup = null;
     this.target = null; this.aiT = 0; this.reactT = 0; this.aimErr = 0; this.strafe = 1;
     this.spawn();
   }
   loadout(){
-    this.slots = [ {id:'pistol', mag:WEAPONS.pistol.mag, res:WEAPONS.pistol.reserve},
-                   {id:'ar',     mag:WEAPONS.ar.mag,     res:WEAPONS.ar.reserve} ];
-    this.cur = 0; this.nades = CONFIG.rules.startNades;
+    this.slots = [ {id:'pistol', mag:WEAPONS.pistol.mag, res:WEAPONS.pistol.reserve} ];
+    this.cur = 0; this.nades = { frag: CONFIG.rules.startNades, gas: 0, mine: 0 }; this.nadeType = 'frag'; this.gas = 0;
   }
   spawn(){
     let best = spawnPoints[0], bd = -1e9;
@@ -35,19 +34,19 @@ class Fighter {
   }
   die(by, drop){
     this.dead = true; this.respawnT = CONFIG.rules.respawnDelay; this.deaths++;
-    if (drop && CONFIG.rules.dropOnDeath) dropWeapon(this.slots[this.cur], this.x, this.y);
+    if (drop && CONFIG.rules.dropOnDeath && this.slots[this.cur].id !== 'pistol') dropWeapon(this.slots[this.cur], this.x, this.y);
     spawnParts(this.x+this.w/2, this.y+this.h/2, 26, this.col, 300, 0.8, 4);
     spawnParts(this.x+this.w/2, this.y+this.h/2, 10, '#c0392b', 260, 0.7, 3);
     if (this.human) shake = Math.max(shake, 6);
     if (by && by !== this){
       by.kills++;
-      feedAdd(by.name + '  >  ' + this.name);
+      feedAdd(by.name.toUpperCase() + ' KILLED ' + this.name.toUpperCase() + ' [' + WEAPONS[by.slots[by.cur].id].short + ']');
       const L = CONFIG.match.killLimit;
       if (L > 0 && by.kills >= L && !matchState.over){ matchState.over = 5; matchState.winner = by.name; }
     } else feedAdd(this.name + ' died');
   }
   switchTo(i){
-    if (i === this.cur) return;
+    if (i === this.cur || i >= this.slots.length) return;
     this.cur = i; this.reloadT = 0; this.cool = 0.2;
     if (this.human) popup(WEAPONS[this.slots[i].id].name);
   }
@@ -62,50 +61,47 @@ class Fighter {
     s.mag += take; s.res -= take; this.reloadT = 0;
   }
   throwNade(){
-    if (this.nades <= 0 || this.throwCool > 0) return;
-    const N = CONFIG.rules.nade;
-    this.nades--; this.throwCool = 0.4;
-    grenades.push({
-      x: this.x+this.w/2+Math.cos(this.aim)*14, y: this.y+this.h/2+Math.sin(this.aim)*14,
-      vx: Math.cos(this.aim)*N.speed + this.vx*0.5, vy: Math.sin(this.aim)*N.speed - 120 + this.vy*0.3,
-      t: N.fuse, owner: this
-    });
+    const k = this.nadeType;
+    if (this.nades[k] <= 0 || this.throwCool > 0) return;
+    if (k === 'mine' && !this.grounded){ if (this.human) popup('Plant mines on the ground'); return; }
+    this.nades[k]--; this.throwCool = 0.4;
+    if (k === 'mine'){
+      const cx = this.x + this.w/2, gy = dropToGround(cx-5, this.y, 10, 6) + 6;
+      mines.push({ x: cx, y: gy, arm: 1.2, life: 90, owner: this });
+      if (this.human) popup('Mine planted');
+    } else {
+      const N = CONFIG.rules.nade;
+      grenades.push({
+        x: this.x+this.w/2+Math.cos(this.aim)*14, y: this.y+this.h/2+Math.sin(this.aim)*14,
+        vx: Math.cos(this.aim)*N.speed + this.vx*0.5, vy: Math.sin(this.aim)*N.speed - 120 + this.vy*0.3,
+        t: k === 'gas' ? 1.2 : N.fuse, owner: this, kind: k
+      });
+    }
+    if (this.nades[k] <= 0 && this.human){ for (const t of ['frag','gas','mine']) if (this.nades[t] > 0){ this.nadeType = t; break; } }
   }
   tryPickup(){
     const it = this.nearPickup;
     if (!it || !it.active) return;
     const def = WEAPONS[it.id];
-    const have = this.slots.findIndex(s => s.id === it.id);
-    if (have >= 0){
-      const s = this.slots[have];
-      s.res = Math.min(def.reserve*2, s.res + (it.res != null ? it.res + it.mag : def.reserve));
-      if (this.human) popup('+ ' + def.name + ' ammo');
-    } else {
-      dropWeapon(this.slots[this.cur], this.x, this.y);
-      this.slots[this.cur] = { id: it.id, mag: it.mag != null ? it.mag : def.mag, res: it.res != null ? it.res : def.reserve };
-      this.reloadT = 0;
-      if (this.human) popup('Picked up ' + def.name);
-    }
+    if (this.slots.some(s => s.id === it.id)){ if (this.human) popup('You already have ' + def.name); return; }
+    const slot = { id: it.id, mag: it.mag != null ? it.mag : def.mag, res: it.res != null ? it.res : def.reserve };
+    if (this.slots.length < CONFIG.rules.maxWeapons){ this.slots.push(slot); this.cur = this.slots.length - 1; }
+    else { dropWeapon(this.slots[this.cur], this.x, this.y); this.slots[this.cur] = slot; }
+    this.reloadT = 0; this.cool = 0.2;
+    if (this.human) popup('Picked up ' + def.name);
     spawnParts(it.x+9, it.y+6, 10, '#ffffff', 160, 0.4, 2);
     if (it.temp){ const i = pickups.indexOf(it); if (i >= 0) pickups.splice(i,1); }
     else { it.active = false; it.timer = CONFIG.rules.pickupRespawn; }
     this.nearPickup = null;
   }
   collectAuto(it){
-    if (it.id === 'ammo'){
-      let any = false;
-      for (const s of this.slots){
-        const w = WEAPONS[s.id], cap = w.reserve*2;
-        if (s.res < cap){ s.res = Math.min(cap, s.res + Math.ceil(w.mag*1.5)); any = true; }
-      }
-      if (!any) return false;
-      if (this.human) popup('+ Ammo');
-    } else {
-      if (this.nades >= CONFIG.rules.maxNades) return false;
-      this.nades++;
-      if (this.human) popup('+ Grenade');
-    }
-    spawnParts(it.x+9, it.y+6, 8, '#7CFC00', 160, 0.4, 2);
+    if (it.id === 'ammo') return false;
+    const t = it.id.slice(5);
+    if (this.nades[t] >= CONFIG.rules.maxNades) return false;
+    this.nades[t] = Math.min(CONFIG.rules.maxNades, this.nades[t] + 2);
+    if (this.human) popup('+ ' + NADE[t].name);
+    if (this.nades[this.nadeType] <= 0) this.nadeType = t;
+    spawnParts(it.x+9, it.y+6, 8, '#ffffff', 160, 0.4, 2);
     if (it.temp){ const i = pickups.indexOf(it); if (i >= 0) pickups.splice(i,1); }
     else { it.active = false; it.timer = CONFIG.rules.pickupRespawn; }
     return true;
@@ -135,7 +131,7 @@ class Fighter {
     const cx = this.x+this.w/2, cy = this.y+this.h/2-2;
     const mx = cx + Math.cos(this.aim)*(w.len+6), my = cy + Math.sin(this.aim)*(w.len+6);
     for (let i=0;i<w.pellets;i++){
-      const a = this.aim + (Math.random()-0.5)*2*w.spread;
+      const a = this.aim + (Math.random()-0.5)*2*w.spread + (this.gas > 0 ? (Math.random()-0.5)*0.5 : 0);
       bullets.push({ x:mx, y:my, px:mx, py:my, vx:Math.cos(a)*w.speed, vy:Math.sin(a)*w.speed, life:w.life, w, dist:0, owner:this });
     }
     this.vx -= Math.cos(this.aim)*w.kick; this.vy -= Math.sin(this.aim)*w.kick*0.4;
@@ -205,7 +201,7 @@ class Fighter {
       let pk = null, pd = 600;
       for (const p of pickups){
         if (!p.active) continue;
-        const want = (p.id==='ammo' && low) || (p.id!=='ammo' && p.id!=='nade' && me.slots[me.cur].id==='pistol');
+        const want = p.id!=='ammo' && !p.id.startsWith('nade') && me.slots.length < 3 && !me.slots.some(s => s.id === p.id);
         if (!want) continue;
         const d = Math.hypot(cx-(p.x+9), cy-(p.y+6));
         if (d < pd){ pd = d; pk = p; }
@@ -244,7 +240,7 @@ class Fighter {
     if (inp.pick) this.tryPickup();
     const ax = inp.ax, up = inp.up, fire = inp.fire;
 
-    const target = ax * C.runSpeed, acc = this.grounded ? C.groundAccel : C.airAccel;
+    this.gas = Math.max(0, this.gas - dt); const target = ax * C.runSpeed * (this.gas > 0 ? 0.55 : 1), acc = this.grounded ? C.groundAccel : C.airAccel;
     if (this.vx < target) this.vx = Math.min(target, this.vx + acc*dt);
     else if (this.vx > target) this.vx = Math.max(target, this.vx - acc*dt);
 
@@ -273,7 +269,7 @@ class Fighter {
 
     let near = null, nd = 50;
     for (const p of pickups){
-      if (!p.active || p.id==='ammo' || p.id==='nade') continue;
+      if (!p.active || p.id==='ammo' || p.id.startsWith('nade')) continue;
       const d = Math.hypot(this.x+this.w/2-(p.x+9), this.y+this.h/2-(p.y+6));
       if (d < nd){ nd = d; near = p; }
     }

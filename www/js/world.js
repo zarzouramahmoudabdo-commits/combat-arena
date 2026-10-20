@@ -17,7 +17,7 @@ function los(x0, y0, x1, y1){
   for (let i=1;i<n;i++){ const t=i/n; if (solid(Math.floor((x0+(x1-x0)*t)/T), Math.floor((y0+(y1-y0)*t)/T))) return false; }
   return true;
 }
-const fighters = [], bullets = [], grenades = [], parts = [], rings = [], pickups = [], feed = [];
+const fighters = [], bullets = [], grenades = [], mines = [], clouds = [], parts = [], rings = [], pickups = [], feed = [];
 const matchState = { over: 0, winner: '' };
 let shake = 0, popupT = 0, popupText = '', clock = 0;
 function popup(t){ popupText = t; popupT = 1.6; }
@@ -41,12 +41,13 @@ function updateParts(dt){
 
 // ---------- pickups ----------
 function rollItem(){
-  let total = EXTRA_WEIGHTS.ammo + EXTRA_WEIGHTS.nade;
+  let total = 0;
   for (const k in WEAPONS) total += WEAPONS[k].weight;
+  for (const k in EXTRA_WEIGHTS) total += EXTRA_WEIGHTS[k];
   let r = Math.random()*total;
   for (const k in WEAPONS){ r -= WEAPONS[k].weight; if (r < 0) return k; }
-  r -= EXTRA_WEIGHTS.ammo; if (r < 0) return 'ammo';
-  return 'nade';
+  for (const k in EXTRA_WEIGHTS){ r -= EXTRA_WEIGHTS[k]; if (r < 0) return k; }
+  return 'nade_frag';
 }
 function addPickup(x, y, id, extra){
   const p = { x, y, w:18, h:12, id, active:true, timer:0, temp:false, life:0, mag:null, res:null };
@@ -63,7 +64,7 @@ function updatePickups(dt){
     const p = pickups[i];
     if (p.active){
       if (p.temp){ p.life -= dt; if (p.life <= 0){ pickups.splice(i,1); continue; } }
-      if (p.id==='ammo' || p.id==='nade'){
+      if (p.id==='ammo' || p.id.startsWith('nade')){
         for (const f of fighters){
           if (f.dead) continue;
           if (Math.hypot(f.x+f.w/2-(p.x+9), f.y+f.h/2-(p.y+6)) < 36){ if (f.collectAuto(p)) break; }
@@ -150,6 +151,6 @@ function updateGrenades(dt){
     const g = grenades[i];
     g.vy += CONFIG.gravity*dt; g.t -= dt;
     moveBody(g, dt, N.bounce, 5);
-    if (g.t <= 0){ explode(g.x, g.y, { r:N.r, dmg:N.dmg, knock:N.knock }, g.owner); grenades.splice(i, 1); }
+    if (g.t <= 0){ if (g.kind === 'gas') clouds.push({ x:g.x, y:g.y, r:100, t:7, owner:g.owner }); else explode(g.x, g.y, { r:N.r, dmg:N.dmg, knock:N.knock }, g.owner); grenades.splice(i, 1); }
   }
 }

@@ -6,9 +6,9 @@ const CONFIG = {
   jet: { thrust: 2000, maxUp: 380, fuel: 100, drain: 40, regen: 35, startDelay: 0.15, infinite: true },
   match: { bots: 9, botSkill: 0.6, killLimit: 0, playerName: 'You' },
   rules: {
-    respawnDelay: 3, spawnProtect: 2, selfDamage: 0.6, infiniteAmmo: false,
+    respawnDelay: 3, spawnProtect: 2, selfDamage: 0.6, infiniteAmmo: true,
     dropOnDeath: true, pickupRespawn: 15, dropLife: 20,
-    maxNades: 5, startNades: 3, losBlocking: true, maxParticles: 350,
+    maxNades: 5, startNades: 3, maxWeapons: 4, losBlocking: true, maxParticles: 350,
     nade: { fuse: 2.4, speed: 520, r: 95, dmg: 100, knock: 600, bounce: 0.5 }
   }
 };
@@ -24,7 +24,7 @@ const WEAPONS = {
   glauncher:{name:'Grenade L.',short:'GL', dmg:0,  rate:0.70, speed:600,  life:1.6,  spread:0.02, pellets:1, mag:4,  reserve:12,  reload:2.0, kick:60,  len:24, col:'#4b4b2a', trail:'#cccc66', weight:4,  falloff:false, shake:2, grav:900, bounce:0.45, exp:{ r:90, dmg:70, knock:500 } },
   energy:  { name:'Energy',  short:'NRG', dmg:28, rate:0.22, speed:1300, life:0.8,  spread:0.0,  pellets:1, mag:25, reserve:75,  reload:1.6, kick:5,   len:24, col:'#00c3ff', trail:'#66f0ff', weight:3,  falloff:false, shake:0 }
 };
-const EXTRA_WEIGHTS = { ammo: 12, nade: 6 };
+const EXTRA_WEIGHTS = { ammo: 0, nade_frag: 5, nade_gas: 4, nade_mine: 4 };
 
 const NAMES = ['Falcon','Viper','Ghost','Rhino','Shadow','Blaze','Hawk','Wolf','Cobra','Titan','Raven','Storm'];
 const UNIFORMS = ['#3b7a3b','#2f6fb0','#b03a2f','#c9a227','#7b3fa0','#2a9d8f','#d2691e','#555b66','#c2185b','#6d8b2f','#1e88a8','#8d6e63'];
