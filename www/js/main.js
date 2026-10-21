@@ -280,7 +280,7 @@ function drawHUD(){
 function render(){
   ctx.setTransform(1,0,0,1,0,0);
   const g = ctx.createLinearGradient(0,0,0,SH); g.addColorStop(0, mapDef.sky[0]); g.addColorStop(1, mapDef.sky[1]);
-  ctx.fillStyle = g; ctx.fillRect(0,0,SW,SH);
+  ctx.fillStyle = g; ctx.fillRect(0,0,SW,SH); drawBackdrop();
   const sh = SET.shake ? shake : 0, sx = (Math.random()-0.5)*sh, sy = (Math.random()-0.5)*sh;
   ctx.setTransform(scale,0,0,scale,(-cam.x+sx)*scale,(-cam.y+sy)*scale);
   const vw = SW/scale, vh = CONFIG.viewH;
